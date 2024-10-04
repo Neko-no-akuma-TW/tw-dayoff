@@ -7,13 +7,13 @@ This is a simple API wrapper for Taiwan Day Off API. It provides a simple way to
 ---
 ## Installation
 ```bash
-pip install taiwan_day_off
+pip install tw-dayoff
 ```
 ---
 ## Usage
 ```python
-from taiwan_day_off import TaiwanDayOff
-day_off_obj = TaiwanDayOff("Chinese City Or County Name")
+from tw_dayoff import TyphoonDayOff
+day_off_obj = TyphoonDayOff("Chinese City Or County Name")
 print(day_off_obj.get_day_off())
 ```
 ---
