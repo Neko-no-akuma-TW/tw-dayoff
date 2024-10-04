@@ -20,8 +20,8 @@ print(day_off_obj.get_day_off())
 ## Welcome to contribute to this project
 If you have any idea or suggestion, please feel free to open an issue or pull request.
 ---
-## 感謝以下的協作者們
-因為有你們，所以這個專案才會變得更好。<br/>
+## Thanks to all contributors
+Below is the contributors of this project. Thanks for your contribution.</br>
 <a href="https://github.com/Neko-no-akuma-TW/tw-dayoff/graphs/contributors">
 <img src="https://contrib.rocks/image?repo=Neko-no-akuma-TW/tw-dayoff" />
 </a>
