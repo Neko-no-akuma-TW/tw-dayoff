@@ -13,9 +13,9 @@ __author__ = "Neko no akuma"
 __license__ = "GNU GPLv3"
 __copyright__ = "Copyright 2024-present Neko No Akuma"
 
-__version__ = "0.0.1"
+__version__ = "0.0.3"
 
-from main import *
+from tw_dayoff.main import *
 
 if __name__ == "__main__":
     print("Why are you running this file?")

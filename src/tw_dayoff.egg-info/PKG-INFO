@@ -1,9 +1,7 @@
 Metadata-Version: 2.1
 Name: tw-dayoff
-Version: 0.0.1
+Version: 0.0.3
 Summary: A simple Python package to get Taiwan's dayoff information.
-Home-page: https://dybts.cloudns.be
-Author: Neko No Akuma
 Author-email: Neko No Akuma <nekotw@nekotw.serv00.net>
 License:                     GNU GENERAL PUBLIC LICENSE
                                Version 3, 29 June 2007
