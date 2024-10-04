@@ -13,7 +13,7 @@ pip install taiwan_day_off
 ## Usage
 ```python
 from taiwan_day_off import TaiwanDayOff
-day_off_obj = TaiwanDayOff("臺北市")
+day_off_obj = TaiwanDayOff("Chinese City Or County Name")
 print(day_off_obj.get_day_off())
 ```
 ---
