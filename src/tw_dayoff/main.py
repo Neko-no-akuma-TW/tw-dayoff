@@ -10,7 +10,7 @@ class TyphoonDayOff:
     Get the typhoon day off status of a city or county in Taiwan
 
     Args:
-        city_county_name (str): The name of the city or county in Taiwan(Like 高雄市, 台北市, 新北市, etc.)
+        city_county_name (str): The code of the city or county in Taiwan(Like kh(高雄市), tp(台北市), ntpc(新北市), etc.)
 
     Functions:
         get_dayoff(): Get the typhoon day off status of the city or county

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: tw-dayoff
-Version: 0.0.3
+Version: 0.1.0
 Summary: A simple Python package to get Taiwan's dayoff information.
 Author-email: Neko No Akuma <nekotw@nekotw.serv00.net>
 License:                     GNU GENERAL PUBLIC LICENSE
@@ -677,8 +677,8 @@ License:                     GNU GENERAL PUBLIC LICENSE
         the library.  If this is what you want to do, use the GNU Lesser General
         Public License instead of this License.  But first, please read
         <https://www.gnu.org/licenses/why-not-lgpl.html>.
-Project-URL: Homepage, https://dybts.cloudns.be
-Project-URL: Documentation, https://dybts.cloudns.be/
+Project-URL: Homepage, https://dybts.us.kg
+Project-URL: Documentation, https://dybts.us.kg/
 Project-URL: Repository, https://github.com/NekoNoAkuma/tw-dayoff
 Keywords: taiwan,tw,dayoff,holiday
 Classifier: Development Status :: 3 - Alpha
@@ -708,13 +708,13 @@ This is a simple API wrapper for Taiwan Day Off API. It provides a simple way to
 ---
 ## Installation
 ```bash
-pip install taiwan_day_off
+pip install tw-dayoff
 ```
 ---
 ## Usage
 ```python
-from taiwan_day_off import TaiwanDayOff
-day_off_obj = TaiwanDayOff("Chinese City Or County Name")
+from tw_dayoff import TyphoonDayOff
+day_off_obj = TyphoonDayOff("Chinese City Or County Name")
 print(day_off_obj.get_day_off())
 ```
 ---

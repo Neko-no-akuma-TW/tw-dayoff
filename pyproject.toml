@@ -5,7 +5,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 [project]
 name = "tw-dayoff"
-version = "0.0.3"
+version = "0.1.0"
 dependencies = [
     "requests",
 ]
@@ -34,6 +34,6 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://dybts.cloudns.be"
-Documentation = "https://dybts.cloudns.be/"
+Homepage = "https://dybts.us.kg"
+Documentation = "https://dybts.us.kg/"
 Repository = "https://github.com/NekoNoAkuma/tw-dayoff"
