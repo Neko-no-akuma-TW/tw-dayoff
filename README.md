@@ -13,7 +13,7 @@ pip install tw-dayoff
 ## Usage
 ```python
 from tw_dayoff import TyphoonDayOff
-day_off_obj = TyphoonDayOff("Chinese City Or County Name")
+day_off_obj = TyphoonDayOff("City Or County Code")
 print(day_off_obj.get_day_off())
 ```
 ---
