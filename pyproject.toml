@@ -41,3 +41,6 @@ tw-dayoff = "tw_dayoff.__main__:main"
 Homepage = "https://dybts.us.kg"
 Documentation = "https://github.com/Neko-no-akuma-TW/tw-dayoff#readme"
 Repository = "https://github.com/Neko-no-akuma-TW/tw-dayoff"
+
+[tool.setuptools.packages.find]
+where = ["src"]
