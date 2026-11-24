@@ -3,37 +3,41 @@ requires = [
     "setuptools>=61.0"
 ]
 build-backend = "setuptools.build_meta"
+
 [project]
 name = "tw-dayoff"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
-    "requests",
+    "requests>=2.25.0",
 ]
-requires-python = ">=3.6"
+requires-python = ">=3.9"
 authors = [
-    {name="Neko No Akuma", email = "nekotw@dybts.us.kg"},
+    {name = "Neko No Akuma", email = "nekotw@dybts.us.kg"},
 ]
-description = "A simple Python package to get Taiwan's dayoff information."
+description = "Python wrapper for Taiwan work/school closure (停班停課) data via dashboard.tw API."
 readme = "README.md"
 license = {file = "LICENSE"}
-keywords = ["taiwan", "tw", "dayoff", "holiday"]
+keywords = ["taiwan", "tw", "dayoff", "typhoon", "work_closure", "dashboard-tw"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.6",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
 ]
 
+[project.scripts]
+tw-dayoff = "tw_dayoff.__main__:main"
+
 [project.urls]
 Homepage = "https://dybts.us.kg"
-Documentation = "https://dybts.us.kg/"
-Repository = "https://github.com/Neko-No-Akuma-TW/tw-dayoff"
+Documentation = "https://github.com/Neko-no-akuma-TW/tw-dayoff#readme"
+Repository = "https://github.com/Neko-no-akuma-TW/tw-dayoff"
