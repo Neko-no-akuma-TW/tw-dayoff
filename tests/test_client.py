@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+import tw_dayoff
 from tw_dayoff import (
     ApiError,
     AuthenticationError,
@@ -14,6 +15,8 @@ from tw_dayoff import (
     DashboardClient,
     RateLimitError,
     TyphoonDayOff,
+    clear_token_cache,
+    reset_default_client,
 )
 
 
@@ -58,6 +61,14 @@ SAMPLE_META = {
 
 
 class TestDashboardClient(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_token_cache()
+        reset_default_client()
+
+    def tearDown(self) -> None:
+        reset_default_client()
+        clear_token_cache()
+
     def test_missing_credentials_raises(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             client = DashboardClient()
@@ -186,6 +197,14 @@ class TestDashboardClient(unittest.TestCase):
 
 
 class TestTyphoonDayOff(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_token_cache()
+        reset_default_client()
+
+    def tearDown(self) -> None:
+        reset_default_client()
+        clear_token_cache()
+
     def test_high_level_wrapper_and_empty_result(self) -> None:
         session = MagicMock(spec=requests.Session)
         session.get.side_effect = [
@@ -203,6 +222,38 @@ class TestTyphoonDayOff(unittest.TestCase):
         # Subsequent calls return empty data (no active closure announcement)
         self.assertIsNone(wrapper.get_day_off(use_etag=False))
         self.assertFalse(wrapper.is_dayoff(use_etag=False))
+
+    def test_configure_and_cross_function_token_reuse(self) -> None:
+        session = MagicMock(spec=requests.Session)
+        session.post.return_value = _mock_response(
+            200,
+            {"access_token": "global-tok", "token_type": "Bearer", "expires_in": 86400},
+        )
+        session.get.return_value = _mock_response(
+            200,
+            {"data": [SAMPLE_ROW], "meta": SAMPLE_META},
+        )
+
+        tw_dayoff.configure("cid", "csec", session=session)
+
+        def other_function() -> str:
+            return tw_dayoff.get_token()
+
+        class OtherService:
+            def check(self) -> bool:
+                with TyphoonDayOff("臺北市") as wrapper:
+                    return wrapper.is_dayoff()
+
+        self.assertEqual(other_function(), "global-tok")
+        self.assertTrue(OtherService().check())
+        self.assertEqual(tw_dayoff.get_dayoff("臺北市"), "明天停止上班、停止上課。")
+        self.assertEqual(session.post.call_count, 1)
+
+        # Even a newly constructed DashboardClient with the same credentials reuses the token
+        separate_session = MagicMock(spec=requests.Session)
+        separate_client = DashboardClient("cid", "csec", session=separate_session)
+        self.assertEqual(separate_client.access_token, "global-tok")
+        self.assertEqual(separate_session.post.call_count, 0)
 
 
 if __name__ == "__main__":

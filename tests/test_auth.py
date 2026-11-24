@@ -5,7 +5,12 @@ from unittest.mock import MagicMock
 
 import requests
 
-from tw_dayoff import AuthenticationError, OAuthTokenClient, RateLimitError
+from tw_dayoff import (
+    AuthenticationError,
+    OAuthTokenClient,
+    RateLimitError,
+    clear_token_cache,
+)
 
 
 def _mock_response(status_code: int, json_body: dict, headers: dict = None) -> MagicMock:
@@ -18,6 +23,12 @@ def _mock_response(status_code: int, json_body: dict, headers: dict = None) -> M
 
 
 class TestOAuthTokenClient(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_token_cache()
+
+    def tearDown(self) -> None:
+        clear_token_cache()
+
     def test_requires_credentials(self) -> None:
         with self.assertRaises(AuthenticationError):
             OAuthTokenClient("", "secret")
@@ -78,6 +89,31 @@ class TestOAuthTokenClient(unittest.TestCase):
         with self.assertRaises(RateLimitError) as ctx:
             client.get_token()
         self.assertEqual(ctx.exception.retry_after, 15)
+
+    def test_shared_cache_across_instances(self) -> None:
+        session1 = MagicMock(spec=requests.Session)
+        session2 = MagicMock(spec=requests.Session)
+        session1.post.return_value = _mock_response(
+            200,
+            {"access_token": "shared-tok", "token_type": "Bearer", "expires_in": 86400},
+        )
+        session2.post.return_value = _mock_response(
+            200,
+            {"access_token": "refreshed-tok", "token_type": "Bearer", "expires_in": 86400},
+        )
+
+        client1 = OAuthTokenClient("cid", "csec", session=session1)
+        client2 = OAuthTokenClient("cid", "csec", session=session2)
+
+        self.assertEqual(client1.get_token(), "shared-tok")
+        self.assertEqual(client2.get_token(), "shared-tok")
+        self.assertEqual(session1.post.call_count, 1)
+        self.assertEqual(session2.post.call_count, 0)
+
+        # Invalidating from one client clears the shared cache for all instances
+        client1.invalidate()
+        self.assertEqual(client2.get_token(), "refreshed-tok")
+        self.assertEqual(session2.post.call_count, 1)
 
 
 if __name__ == "__main__":

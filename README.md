@@ -85,6 +85,37 @@ with DashboardClient() as client:
     print(client.last_source)
 ```
 
+### 3. 跨函式／跨 Class 共用同一組 Token（推薦）
+
+本套件內建**行程層級（process-wide）的執行緒安全 Token 快取**：
+1. **自動共用 Token**：只要是同一組 `client_id` + `client_secret`（例如透過環境變數設定），程式中不同函式或 Class 各自建立的 `TyphoonDayOff` 或 `DashboardClient`，都會自動共用同一個有效的 Bearer Token，不會重複呼叫 `/auth/token`。
+2. **啟動時集中設定 `tw_dayoff.configure()`**：若在程式進入點呼叫一次 `configure()`，後續所有模組層級函式（`get_dayoff`、`is_dayoff`、`get_latest`）以及未額外傳參數的 `TyphoonDayOff` 都會共用同一個 `DashboardClient`（連同 HTTP Session 與 ETag 快取一起復用）：
+
+```python
+import requests
+import tw_dayoff
+
+# 1. 在程式啟動時設定一次
+tw_dayoff.configure(client_id="your-client-id", client_secret="your-client-secret")
+
+# 2. 其他函式或 Class 可直接呼叫，共用同一組 Token 與 ETag 快取
+def check_taipei():
+    return tw_dayoff.is_dayoff("臺北市")
+
+class DisasterMonitor:
+    def fetch_kaohsiung(self):
+        return tw_dayoff.TyphoonDayOff("高雄市").get_dayoff()
+
+    def fetch_other_dataset(self):
+        # 3. 也能直接取出同一個 Token 拿去呼叫 dashboard.tw 的其他 API
+        token = tw_dayoff.get_token()
+        return requests.get(
+            "https://dashboard.tw/api/v1/datasets/typhoon_warning/latest",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        ).json()
+```
+
 ---
 
 ## CLI 指令

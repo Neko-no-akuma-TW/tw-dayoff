@@ -1,14 +1,32 @@
 """OAuth 2.0 Client Credentials token management for dashboard.tw."""
 
+import hashlib
 import threading
 import time
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 import requests
 
 from .exceptions import ApiError, AuthenticationError, RateLimitError
 
 DEFAULT_BASE_URL = "https://dashboard.tw/api/v1"
+
+# Process-wide shared token cache keyed by (token_url, client_id, secret_digest).
+# Allows multiple DashboardClient / TyphoonDayOff instances across functions and
+# classes in the same Python process to reuse a single valid Bearer token.
+_CACHE_LOCK = threading.Lock()
+_SHARED_TOKEN_CACHE: Dict[Tuple[str, str, str], Tuple[str, float]] = {}
+
+
+def _cache_key(token_url: str, client_id: str, client_secret: str) -> Tuple[str, str, str]:
+    secret_digest = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
+    return (token_url, client_id, secret_digest)
+
+
+def clear_token_cache() -> None:
+    """Clear the process-wide cached OAuth tokens."""
+    with _CACHE_LOCK:
+        _SHARED_TOKEN_CACHE.clear()
 
 
 def _parse_retry_after(headers: object) -> Optional[int]:
@@ -33,6 +51,7 @@ class OAuthTokenClient:
         timeout: float = 10.0,
         refresh_margin_seconds: float = 60.0,
         session: Optional[requests.Session] = None,
+        use_shared_cache: bool = True,
     ) -> None:
         if not client_id or not client_secret:
             raise AuthenticationError(
@@ -45,6 +64,8 @@ class OAuthTokenClient:
         self.refresh_margin_seconds = max(0.0, refresh_margin_seconds)
         self._session = session or requests.Session()
         self._owns_session = session is None
+        self.use_shared_cache = use_shared_cache
+        self._key = _cache_key(self.token_url, self.client_id, self.client_secret)
 
         self._lock = threading.Lock()
         self._access_token: Optional[str] = None
@@ -52,14 +73,13 @@ class OAuthTokenClient:
 
     def get_token(self, *, force_refresh: bool = False) -> str:
         """Return a valid cached access token, or request a new one if expired."""
-        with self._lock:
+        lock = _CACHE_LOCK if self.use_shared_cache else self._lock
+        with lock:
             now = time.monotonic()
-            if (
-                not force_refresh
-                and self._access_token is not None
-                and now < self._expires_at
-            ):
-                return self._access_token
+            if not force_refresh:
+                cached = self._read_cached_locked(now)
+                if cached is not None:
+                    return cached
 
             token, expires_in = self._request_token()
             # Refresh slightly ahead of actual expiry when lifetime allows.
@@ -68,22 +88,41 @@ class OAuthTokenClient:
                 if expires_in > self.refresh_margin_seconds
                 else 0.0
             )
-            self._access_token = token
-            self._expires_at = time.monotonic() + max(0.0, expires_in - margin)
+            expires_at = time.monotonic() + max(0.0, expires_in - margin)
+            self._write_cached_locked(token, expires_at)
             return token
 
     def invalidate(self) -> None:
-        """Clear any cached access token."""
-        with self._lock:
+        """Clear any cached access token for these credentials."""
+        lock = _CACHE_LOCK if self.use_shared_cache else self._lock
+        with lock:
             self._access_token = None
             self._expires_at = 0.0
+            if self.use_shared_cache:
+                _SHARED_TOKEN_CACHE.pop(self._key, None)
+
+    def _read_cached_locked(self, now: float) -> Optional[str]:
+        if self.use_shared_cache:
+            entry = _SHARED_TOKEN_CACHE.get(self._key)
+            if entry is not None and now < entry[1]:
+                return entry[0]
+            return None
+        if self._access_token is not None and now < self._expires_at:
+            return self._access_token
+        return None
+
+    def _write_cached_locked(self, token: str, expires_at: float) -> None:
+        self._access_token = token
+        self._expires_at = expires_at
+        if self.use_shared_cache:
+            _SHARED_TOKEN_CACHE[self._key] = (token, expires_at)
 
     def close(self) -> None:
         """Close the owned HTTP session, if created internally."""
         if self._owns_session:
             self._session.close()
 
-    def _request_token(self) -> tuple:
+    def _request_token(self) -> Tuple[str, float]:
         try:
             response = self._session.post(
                 self.token_url,

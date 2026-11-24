@@ -1,7 +1,8 @@
-"""dashboard.tw API client and high-level TyphoonDayOff wrapper."""
+"""dashboard.tw API client, module-level shared helpers, and TyphoonDayOff."""
 
 from datetime import date, datetime, timedelta, timezone
 import os
+import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
@@ -16,6 +17,10 @@ TAIWAN_TZ = timezone(timedelta(hours=8))
 ENV_CLIENT_ID = "DASHBOARD_TW_CLIENT_ID"
 ENV_CLIENT_SECRET = "DASHBOARD_TW_CLIENT_SECRET"
 ENV_ACCESS_TOKEN = "DASHBOARD_TW_ACCESS_TOKEN"
+
+_DEFAULT_CLIENT_LOCK = threading.Lock()
+_DEFAULT_CLIENT: Optional["DashboardClient"] = None
+_CONFIGURED_CLIENT: bool = False
 
 
 def _format_time_param(value: Union[str, date, datetime]) -> str:
@@ -34,9 +39,9 @@ def _format_time_param(value: Union[str, date, datetime]) -> str:
 class DashboardClient:
     """Client for the dashboard.tw ``work_closure`` open data API.
 
-    Supports OAuth 2.0 Client Credentials token caching/refresh, ETag
-    conditional requests (``304 Not Modified``), cursor pagination, and quota
-    header tracking.
+    Supports OAuth 2.0 Client Credentials token caching/refresh (shared across
+    instances in the same process by default), ETag conditional requests
+    (``304 Not Modified``), cursor pagination, and quota header tracking.
     """
 
     def __init__(
@@ -48,6 +53,7 @@ class DashboardClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = 10.0,
         session: Optional[requests.Session] = None,
+        use_shared_token_cache: bool = True,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -75,11 +81,14 @@ class DashboardClient:
                 base_url=self.base_url,
                 timeout=self.timeout,
                 session=self._session,
+                use_shared_cache=use_shared_token_cache,
             )
         elif resolved_token:
             self._static_token = resolved_token
 
-        self._etag_cache: Dict[Tuple[str, Tuple[Tuple[str, str], ...]], Tuple[str, Dict[str, Any]]] = {}
+        self._etag_cache: Dict[
+            Tuple[str, Tuple[Tuple[str, str], ...]], Tuple[str, Dict[str, Any]]
+        ] = {}
         self.last_rate_limit: Optional[RateLimitInfo] = None
         self.last_source: Optional[SourceInfo] = None
         self.last_next_cursor: Optional[str] = None
@@ -94,6 +103,11 @@ class DashboardClient:
         """Close the underlying HTTP session if created by this client."""
         if self._owns_session:
             self._session.close()
+
+    @property
+    def access_token(self) -> str:
+        """Return a valid Bearer access token (fetching or refreshing if needed)."""
+        return self._get_bearer_token()
 
     def get_latest(
         self,
@@ -188,8 +202,8 @@ class DashboardClient:
             return self._static_token
         raise AuthenticationError(
             "Missing dashboard.tw credentials. Provide client_id & client_secret "
-            f"(or set {ENV_CLIENT_ID} / {ENV_CLIENT_SECRET}), or pass access_token "
-            f"(or set {ENV_ACCESS_TOKEN})."
+            f"(or set {ENV_CLIENT_ID} / {ENV_CLIENT_SECRET}), call tw_dayoff.configure(), "
+            f"or pass access_token (or set {ENV_ACCESS_TOKEN})."
         )
 
     def _extract_records(self, payload: Dict[str, Any]) -> List[WorkClosureRecord]:
@@ -286,6 +300,86 @@ class DashboardClient:
         return None, str(body)
 
 
+def configure(
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+    *,
+    access_token: Optional[str] = None,
+    base_url: str = DEFAULT_BASE_URL,
+    timeout: float = 10.0,
+    session: Optional[requests.Session] = None,
+) -> DashboardClient:
+    """Configure the module-level shared ``DashboardClient`` for the current process.
+
+    Call this once at application startup so all functions and classes using
+    ``tw_dayoff`` module helpers or ``TyphoonDayOff(county)`` automatically
+    reuse the same OAuth token, HTTP session, and ETag cache.
+    """
+    global _DEFAULT_CLIENT, _CONFIGURED_CLIENT
+    with _DEFAULT_CLIENT_LOCK:
+        if _DEFAULT_CLIENT is not None:
+            _DEFAULT_CLIENT.close()
+        _DEFAULT_CLIENT = DashboardClient(
+            client_id=client_id,
+            client_secret=client_secret,
+            access_token=access_token,
+            base_url=base_url,
+            timeout=timeout,
+            session=session,
+        )
+        _CONFIGURED_CLIENT = True
+        return _DEFAULT_CLIENT
+
+
+def get_default_client() -> DashboardClient:
+    """Return the process-wide shared ``DashboardClient`` (creating one from env if needed)."""
+    global _DEFAULT_CLIENT
+    with _DEFAULT_CLIENT_LOCK:
+        if _DEFAULT_CLIENT is None:
+            _DEFAULT_CLIENT = DashboardClient()
+        return _DEFAULT_CLIENT
+
+
+def reset_default_client() -> None:
+    """Close and clear the module-level shared ``DashboardClient``."""
+    global _DEFAULT_CLIENT, _CONFIGURED_CLIENT
+    with _DEFAULT_CLIENT_LOCK:
+        if _DEFAULT_CLIENT is not None:
+            _DEFAULT_CLIENT.close()
+            _DEFAULT_CLIENT = None
+        _CONFIGURED_CLIENT = False
+
+
+def get_token() -> str:
+    """Return a valid Bearer access token from the shared default client.
+
+    Useful when other functions or classes in your program call additional
+    ``dashboard.tw`` API endpoints directly and want to reuse the same token.
+    """
+    return get_default_client().access_token
+
+
+def get_latest(
+    county: Optional[str] = None,
+    *,
+    use_etag: bool = True,
+) -> List[WorkClosureRecord]:
+    """Query latest ``work_closure`` records using the shared default client."""
+    return get_default_client().get_latest(county=county, use_etag=use_etag)
+
+
+def get_dayoff(county: str, *, use_etag: bool = True) -> Optional[str]:
+    """Return the latest closure status text for ``county`` via the shared client."""
+    record = get_default_client().get_county_latest(county, use_etag=use_etag)
+    return record.status if record is not None else None
+
+
+def is_dayoff(county: str, *, use_etag: bool = True) -> bool:
+    """Return True if work and school are fully suspended for ``county``."""
+    record = get_default_client().get_county_latest(county, use_etag=use_etag)
+    return bool(record is not None and record.is_day_off)
+
+
 class TyphoonDayOff:
     """High-level helper to query a single Taiwan county/city's day-off status.
 
@@ -294,11 +388,11 @@ class TyphoonDayOff:
             ``"臺北市"`` / ``"台北市"``), English name (e.g. ``"Taipei"``), or
             legacy abbreviation (e.g. ``"tp"``, ``"kh"``).
         client_id: Optional dashboard.tw OAuth Client ID (falls back to
-            ``DASHBOARD_TW_CLIENT_ID``).
+            ``DASHBOARD_TW_CLIENT_ID`` or ``tw_dayoff.configure()``).
         client_secret: Optional dashboard.tw OAuth Client Secret (falls back to
-            ``DASHBOARD_TW_CLIENT_SECRET``).
+            ``DASHBOARD_TW_CLIENT_SECRET`` or ``tw_dayoff.configure()``).
         access_token: Optional pre-issued Bearer token (falls back to
-            ``DASHBOARD_TW_ACCESS_TOKEN``).
+            ``DASHBOARD_TW_ACCESS_TOKEN`` or ``tw_dayoff.configure()``).
         client: Optional shared ``DashboardClient`` instance.
     """
 
@@ -315,14 +409,25 @@ class TyphoonDayOff:
     ) -> None:
         self.city_county_name = city_county_name
         self.county_code = resolve_county_code(city_county_name)
-        self._owns_client = client is None
-        self.client = client or DashboardClient(
-            client_id=client_id,
-            client_secret=client_secret,
-            access_token=access_token,
-            base_url=base_url,
-            timeout=timeout,
+
+        has_explicit_creds = any(
+            v is not None for v in (client_id, client_secret, access_token)
         )
+        if client is not None:
+            self.client = client
+            self._owns_client = False
+        elif not has_explicit_creds and _CONFIGURED_CLIENT and base_url == DEFAULT_BASE_URL:
+            self.client = get_default_client()
+            self._owns_client = False
+        else:
+            self.client = DashboardClient(
+                client_id=client_id,
+                client_secret=client_secret,
+                access_token=access_token,
+                base_url=base_url,
+                timeout=timeout,
+            )
+            self._owns_client = True
 
     def __enter__(self) -> "TyphoonDayOff":
         return self
